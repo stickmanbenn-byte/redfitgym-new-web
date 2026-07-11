@@ -1,0 +1,31 @@
+/* Hero barbell plate canvas - full viewport, transparent PNGs */
+.rf-hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+  pointer-events: none;
+  /* No blend mode: PNGs are transparent */
+}
+
+/* Text layers above canvas */
+.rf-hero-content {
+  z-index: 4 !important;
+}
+.rf-hero-counter {
+  z-index: 4 !important;
+}
+.rf-hero-scroll-hint {
+  z-index: 4 !important;
+}
+
+/* Headline wrapping fix */
+.rf-hero-headline {
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+.rf-hero-line {
+  white-space: nowrap;
+}

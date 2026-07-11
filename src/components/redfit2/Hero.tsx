@@ -4,8 +4,7 @@ import { gsap, ScrollTrigger, initGsap } from "@/lib/gsap-init";
 import SideRays from "@/components/SideRays";
 import { BARBELL_FRAMES } from "@/assets/barbell/frames";
 
-// One source of truth for hero scroll length — Block 1 Bug 2.
-const HERO_SCROLL_LENGTH = "+=200%";
+const HERO_SCROLL_LENGTH = "+=250%";
 
 function LiveCount() {
   const [n, setN] = useState(47);
@@ -18,7 +17,7 @@ function LiveCount() {
   }, []);
   return (
     <>
-      <b>{n}</b> Training now · 4.9★ on Google
+      <b>{n}</b> Training now \u00b7 4.9\u2605 on Google
     </>
   );
 }
@@ -36,13 +35,14 @@ export function Hero() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const state = { frame: 0 };
-    const TOTAL = 1;
     const N = BARBELL_FRAMES.length;
+    const isMobile = window.innerWidth < 768;
 
-    // Preload frames — progressive; broadcast progress for the Preloader.
+    // Preload frames: first 20 eagerly, rest progressively
     const images: (HTMLImageElement | null)[] = new Array(N).fill(null);
     let loadedCount = 0;
+    let firstFrameReady = false;
+
     const broadcast = () => {
       try {
         window.dispatchEvent(
@@ -50,33 +50,40 @@ export function Hero() {
         );
       } catch {}
     };
-    broadcast();
+
+    const onFrameLoad = (i: number, img: HTMLImageElement) => {
+      images[i] = img;
+      loadedCount++;
+      broadcast();
+      // Entrance: reveal canvas once first frame is ready
+      if (!firstFrameReady && i === 0) {
+        firstFrameReady = true;
+        renderFrame(0);
+        gsap.fromTo(
+          canvas,
+          { opacity: 0, scale: 1.04 },
+          { opacity: 1, scale: 1, duration: 1.1, ease: "power3.out" }
+        );
+      }
+    };
+
     BARBELL_FRAMES.forEach((src, i) => {
       const img = new Image();
       img.decoding = "async";
-      img.onload = () => {
-        images[i] = img;
-        loadedCount++;
-        broadcast();
-        const targetIdx = Math.min(N - 1, Math.round((state.frame / TOTAL) * (N - 1)));
-        if (i === targetIdx) render();
-      };
-      img.onerror = () => {
-        loadedCount++;
-        broadcast();
-      };
+      img.onload = () => onFrameLoad(i, img);
+      img.onerror = () => { loadedCount++; broadcast(); };
       img.src = src;
     });
 
-    const render = () => {
-      const rect = canvas.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
+    // Render a specific frame index, right-anchored
+    const renderFrame = (frameIdx: number) => {
+      const w = canvas.width;
+      const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      const p = Math.max(0, Math.min(1, state.frame / TOTAL));
-      const idx = Math.min(N - 1, Math.round(p * (N - 1)));
+      const idx = Math.max(0, Math.min(N - 1, frameIdx));
       let img = images[idx];
+      // Fallback to nearest loaded frame
       if (!img) {
         for (let d = 1; d < N && !img; d++) {
           img = images[Math.max(0, idx - d)] || images[Math.min(N - 1, idx + d)] || null;
@@ -84,48 +91,47 @@ export function Hero() {
       }
       if (!img) return;
 
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
-      const scale = Math.min(w / iw, h / ih);
-      const dw = iw * scale;
-      const dh = ih * scale;
-      const dx = (w - dw) / 2;
-      const dy = (h - dh) / 2;
-      ctx.drawImage(img, dx, dy, dw, dh);
+      // Plate occupies ~62% of viewport height
+      const targetH = h * 0.62;
+      const scale = targetH / img.naturalHeight;
+      const targetW = img.naturalWidth * scale;
+      // Anchor center-point at 72% across (desktop) or 50% (mobile)
+      const anchorX = isMobile ? 0.5 : 0.72;
+      const dx = w * anchorX - targetW / 2;
+      const dy = (h - targetH) / 2;
+      ctx.drawImage(img, dx, dy, targetW, targetH);
     };
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       const rect = canvas.getBoundingClientRect();
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      render();
+      // Re-render current frame at new size
+      renderFrame(0);
     };
-    // Bug 3 — rAF-throttled resize handler.
+
     let ticking = false;
     const onResize = () => {
       if (ticking) return;
       ticking = true;
-      requestAnimationFrame(() => {
-        resize();
-        ticking = false;
-      });
+      requestAnimationFrame(() => { resize(); ticking = false; });
     };
     resize();
+    // Hide canvas until first frame loads (entrance will reveal it)
+    gsap.set(canvas, { opacity: 0 });
     window.addEventListener("resize", onResize);
 
-    // Bug 1 — split ONLY the static hero lines, not the swap-word holder.
-    const staticLines = root.querySelectorAll<HTMLElement>(
-      ".rf-hero-line.rf-hero-static-line",
-    );
+    // Split only static headline lines
+    const staticLines = root.querySelectorAll<HTMLElement>(".rf-hero-line.rf-hero-static-line");
     let split: SplitType | null = null;
     if (staticLines.length) {
       split = new SplitType(Array.from(staticLines), { types: "words,chars" });
       gsap.set(split.chars, { yPercent: 110, opacity: 0 });
     }
 
-    // Swap words — the holder itself animates as one block.
+    // Swap words
     const allWords = root.querySelectorAll<HTMLElement>(".rf-hero-headline .rf-swap-word");
     gsap.set(allWords, { opacity: (i) => (i === 0 ? 1 : 0), y: 0 });
     const holder = root.querySelector<HTMLElement>(".rf-swap-word-holder");
@@ -135,28 +141,21 @@ export function Hero() {
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Cross-fade helper for word swap
+    // Timer-based word rotation: 1.5s interval, 0.6s crossfade
     let currentWordIdx = 0;
-    const swapTo = (nextIdx: number) => {
-      if (nextIdx === currentWordIdx || !allWords[nextIdx]) return;
-      const current = allWords[currentWordIdx];
-      const next = allWords[nextIdx];
-      gsap.to(current, {
-        y: -24,
-        opacity: 0,
-        duration: 0.55,
-        ease: "power3.out",
-        overwrite: "auto",
-      });
-      gsap.fromTo(
-        next,
-        { y: 24, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.55, ease: "power3.out", overwrite: "auto" },
-      );
-      currentWordIdx = nextIdx;
-    };
+    let rotateInterval: number | undefined;
+    if (!reduceMotion && allWords.length > 1) {
+      rotateInterval = window.setInterval(() => {
+        const current = allWords[currentWordIdx];
+        const nextIdx = (currentWordIdx + 1) % allWords.length;
+        const next = allWords[nextIdx];
+        gsap.to(current, { y: -24, opacity: 0, duration: 0.6, ease: "power3.inOut", overwrite: "auto" });
+        gsap.fromTo(next, { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: "power3.inOut", overwrite: "auto" });
+        currentWordIdx = nextIdx;
+      }, 1500);
+    }
 
-    // Cursor-reactive rays (Block 4) — subtle, quickTo-lerped.
+    // Cursor-reactive rays
     const raysWrap = raysWrapRef.current;
     let raysX: ((v: number) => void) | null = null;
     let raysY: ((v: number) => void) | null = null;
@@ -166,39 +165,26 @@ export function Hero() {
       raysY = gsap.quickTo(raysWrap, "y", { duration: 0.7, ease: "power3.out" });
       onPointerMove = (e: PointerEvent) => {
         const rect = root.getBoundingClientRect();
-        const nx = (e.clientX - rect.left) / rect.width - 0.5; // -0.5..0.5
+        const nx = (e.clientX - rect.left) / rect.width - 0.5;
         const ny = (e.clientY - rect.top) / rect.height - 0.5;
-        // max ±8% of viewport
         raysX?.(nx * rect.width * 0.08);
         raysY?.(ny * rect.height * 0.08);
       };
       root.addEventListener("pointermove", onPointerMove);
     }
 
-    let rotateInterval: number | undefined;
-    let heroST: ScrollTrigger | null = null;
+    // Track last rendered frame to avoid redundant draws
+    let lastRenderedIdx = -1;
 
     const ctxAnim = gsap.context(() => {
       ScrollTrigger.matchMedia({
-        // DESKTOP + TABLET (motion allowed)
         "(min-width: 768px) and (prefers-reduced-motion: no-preference)": () => {
           const inTl = gsap.timeline({ delay: 0.15, defaults: { ease: "power3.out" } });
           if (split?.chars?.length) {
-            inTl.to(split.chars, {
-              yPercent: 0,
-              opacity: 1,
-              stagger: 0.024,
-              duration: 1.1,
-              ease: "power4.out",
-            });
+            inTl.to(split.chars, { yPercent: 0, opacity: 1, stagger: 0.024, duration: 1.1, ease: "power4.out" });
           }
-          // Bug 1 fix — the holder reveals as one block, not char-by-char.
           if (holder) {
-            inTl.to(
-              holder,
-              { yPercent: 0, opacity: 1, duration: 0.9, ease: "power3.out" },
-              "-=0.6",
-            );
+            inTl.to(holder, { yPercent: 0, opacity: 1, duration: 0.9, ease: "power3.out" }, "-=0.6");
           }
           inTl
             .to(".rf-hero-eyebrow", { opacity: 1, y: 0, duration: 0.6 }, 0.2)
@@ -207,88 +193,38 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.7 }, "-=0.5")
             .to(".rf-hero-scroll-hint", { opacity: 1, duration: 0.6 }, "-=0.4");
 
-          // Bug 2 + Bug 5 + Block 4 — one pin + scroll-driven word swap.
-          gsap.to(state, {
-            frame: TOTAL,
-            ease: "none",
-            scrollTrigger: {
-              trigger: root,
-              start: "top top",
-              end: HERO_SCROLL_LENGTH,
-              pin: true,
-              pinSpacing: true,
-              scrub: 1,
-              invalidateOnRefresh: true,
-              onUpdate: (self) => {
-                render();
-                if (allWords.length > 1) {
-                  const idx = Math.min(
-                    allWords.length - 1,
-                    Math.floor(self.progress * allWords.length),
-                  );
-                  if (idx !== currentWordIdx) swapTo(idx);
-                }
-              },
-              onRefreshInit: (self) => {
-                heroST = self;
-              },
+          // Direct frame-index scrub: no proxy tween, tighter connection
+          ScrollTrigger.create({
+            trigger: root,
+            start: "top top",
+            end: HERO_SCROLL_LENGTH,
+            pin: true,
+            pinSpacing: true,
+            scrub: 0.6,
+            invalidateOnRefresh: true,
+            onUpdate: (self) => {
+              const idx = Math.round(self.progress * (N - 1));
+              if (idx !== lastRenderedIdx) {
+                renderFrame(idx);
+                lastRenderedIdx = idx;
+              }
             },
           });
 
-          // Bug 5 — consolidated dashboard timeline (entrance + float + drift + exit)
+          // Dashboard
           const dash = root.querySelector<HTMLElement>(".rf-hero-dashboard");
           if (dash) {
-            gsap.set(dash, {
-              opacity: 0,
-              x: 120,
-              scale: 0.9,
-              rotateY: 10,
-              filter: "blur(10px)",
-              transformPerspective: 900,
-              transformOrigin: "center center",
-            });
-            const entrance = gsap.timeline({ delay: 0.35 });
-            entrance.to(dash, {
-              opacity: 1,
-              x: 0,
-              scale: 1,
-              rotateY: 4,
-              filter: "blur(0px)",
-              duration: 1.4,
-              ease: "power3.out",
-            });
-            // Wrap float in its own tween so it can coexist without compounding
-            // drift+exit which live on a single scrub timeline below.
-            const floatTween = gsap.to(dash, {
-              y: "+=6",
-              duration: 3.2,
-              ease: "sine.inOut",
-              yoyo: true,
-              repeat: -1,
-              paused: true,
-            });
-            entrance.eventCallback("onComplete", () => floatTween.play());
-
-            // Single scroll-linked timeline for drift + exit — one shared trigger.
+            gsap.set(dash, { opacity: 0, x: 120, scale: 0.9, rotateY: 10, filter: "blur(10px)", transformPerspective: 900, transformOrigin: "center center" });
+            gsap.to(dash, { opacity: 1, x: 0, scale: 1, rotateY: 4, filter: "blur(0px)", duration: 1.4, ease: "power3.out", delay: 0.35 });
             const scrollTl = gsap.timeline({
-              scrollTrigger: {
-                trigger: root,
-                start: "top top",
-                end: HERO_SCROLL_LENGTH,
-                scrub: 0.6,
-              },
+              scrollTrigger: { trigger: root, start: "top top", end: HERO_SCROLL_LENGTH, scrub: 0.6 },
             });
             scrollTl
               .to(dash, { yPercent: -10, ease: "none", duration: 0.7 }, 0)
-              .to(
-                dash,
-                { y: -80, opacity: 0, scale: 0.95, filter: "blur(8px)", ease: "power2.in", duration: 0.3 },
-                0.7,
-              );
+              .to(dash, { y: -80, opacity: 0, scale: 0.95, filter: "blur(8px)", ease: "power2.in", duration: 0.3 }, 0.7);
           }
         },
 
-        // MOBILE (motion allowed) — no pin; interval-based word rotation fallback
         "(max-width: 767px) and (prefers-reduced-motion: no-preference)": () => {
           const inTl = gsap.timeline({ delay: 0.1, defaults: { ease: "power3.out" } });
           if (split?.chars?.length) {
@@ -303,44 +239,34 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.6 }, "-=0.4")
             .to(".rf-hero-counter", { opacity: 1, duration: 0.5 }, "-=0.3");
 
-          gsap.to(state, { frame: TOTAL, duration: 4, ease: "power2.inOut", onUpdate: render });
-
-          if (allWords.length > 1) {
-            rotateInterval = window.setInterval(() => {
-              swapTo((currentWordIdx + 1) % allWords.length);
-            }, 2500);
-          }
+          // Mobile: auto-play frames over 4s
+          gsap.to({ frame: 0 }, {
+            frame: N - 1,
+            duration: 4,
+            ease: "power2.inOut",
+            onUpdate: function () {
+              const idx = Math.round((this as any).targets()[0].frame);
+              if (idx !== lastRenderedIdx) {
+                renderFrame(idx);
+                lastRenderedIdx = idx;
+              }
+            },
+          });
 
           const dashM = root.querySelector<HTMLElement>(".rf-hero-dashboard");
           if (dashM) {
-            gsap.fromTo(
-              dashM,
-              { opacity: 0, y: 24, scale: 0.96 },
-              { opacity: 1, y: 0, scale: 1, duration: 1.0, ease: "power3.out", delay: 0.3 },
-            );
+            gsap.fromTo(dashM, { opacity: 0, y: 24, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 1.0, ease: "power3.out", delay: 0.3 });
           }
         },
 
-        // REDUCED MOTION
         "(prefers-reduced-motion: reduce)": () => {
-          gsap.set(
-            [
-              ".rf-hero-eyebrow",
-              ".rf-hero-sub",
-              ".rf-hero-cta-row",
-              ".rf-hero-scroll-hint",
-              ".rf-hero-counter",
-            ],
-            { opacity: 1, y: 0 },
-          );
-          gsap.set(".rf-hero-dashboard", {
-            opacity: 1, x: 0, scale: 1, rotateY: 4, filter: "none",
-          });
+          gsap.set([".rf-hero-eyebrow", ".rf-hero-sub", ".rf-hero-cta-row", ".rf-hero-scroll-hint", ".rf-hero-counter"], { opacity: 1, y: 0 });
+          gsap.set(".rf-hero-dashboard", { opacity: 1, x: 0, scale: 1, rotateY: 4, filter: "none" });
           if (split?.chars) gsap.set(split.chars, { opacity: 1, yPercent: 0 });
           if (holder) gsap.set(holder, { opacity: 1, yPercent: 0 });
           gsap.set(allWords, { opacity: (i) => (i === 0 ? 1 : 0), y: 0 });
-          state.frame = TOTAL;
-          render();
+          gsap.set(canvas, { opacity: 1 });
+          renderFrame(0);
         },
       });
     }, root);
@@ -358,14 +284,13 @@ export function Hero() {
       if (onPointerMove) root.removeEventListener("pointermove", onPointerMove);
       split?.revert();
       ctxAnim.revert();
-      heroST?.kill();
     };
   }, []);
 
   return (
-    <section ref={rootRef} className="rf-hero" aria-label="REDFIT hero" data-section="hero">
+    <section ref={rootRef} className="rf-hero" aria-label="REDFIT hero">
       <canvas ref={canvasRef} className="rf-hero-canvas" />
-      <div ref={raysWrapRef} className="rf-hero-rays">
+      <div className="rf-hero-rays" ref={raysWrapRef}>
         <SideRays
           rayColor1="#8B0000"
           rayColor2="#B01030"
@@ -381,7 +306,6 @@ export function Hero() {
         />
       </div>
       <div className="rf-hero-vignette" />
-      <div className="rf-hero-grain" aria-hidden="true" />
 
       <div className="rf-hero-counter">
         <LiveCount />
@@ -389,7 +313,7 @@ export function Hero() {
 
       <div className="rf-hero-content">
         <div className="rf-hero-eyebrow" style={{ transform: "translateY(10px)" }}>
-          Chhatrapati Sambhajinagar · Est. Strength
+          Chhatrapati Sambhajinagar \u00b7 Est. Strength
         </div>
 
         <h1 className="rf-hero-headline">
@@ -409,16 +333,16 @@ export function Hero() {
         </h1>
 
         <p className="rf-hero-sub" style={{ transform: "translateY(10px)" }}>
-          Forged to last. A premium strength gym engineered around real training — Red Strength equipment,
+          Forged to last. A premium strength gym engineered around real training \u2014 Red Strength equipment,
           certified coaches, and a room that respects the work.
         </p>
 
         <div className="rf-hero-cta-row" style={{ transform: "translateY(10px)" }}>
-          <a href="#pricing" className="rf-btn accent">Start Free Trial →</a>
+          <a href="#pricing" className="rf-btn accent">Start Free Trial \u2192</a>
           <a href="#programs" className="rf-btn ghost">See Programs</a>
         </div>
       </div>
-      <div className="rf-hero-scroll-hint">Scroll · Load the Bar</div>
+      <div className="rf-hero-scroll-hint">Scroll \u00b7 Load the Bar</div>
     </section>
   );
 }
