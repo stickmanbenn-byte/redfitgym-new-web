@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import SplitType from "split-type";
 import { gsap, ScrollTrigger, initGsap } from "@/lib/gsap-init";
 import SideRays from "@/components/SideRays";
-import { BARBELL_FRAMES } from "@/assets/barbell/frames";
 
 const HERO_SCROLL_LENGTH = "+=250%";
 
@@ -24,98 +23,16 @@ function LiveCount() {
 
 export function Hero() {
   const rootRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const raysWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     initGsap();
-    if (!rootRef.current || !canvasRef.current) return;
+    if (!rootRef.current) return;
     const root = rootRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
 
-    const N = BARBELL_FRAMES.length;
-    const isMobile = window.innerWidth < 768;
-
-    // Preload frames
-    const images: (HTMLImageElement | null)[] = new Array(N).fill(null);
-    let loadedCount = 0;
-    let firstFrameReady = false;
-
-    const broadcast = () => {
-      try {
-        window.dispatchEvent(
-          new CustomEvent("redfit:preload", { detail: { loaded: loadedCount, total: N } }),
-        );
-      } catch {}
-    };
-
-    const onFrameLoad = (i: number, img: HTMLImageElement) => {
-      images[i] = img;
-      loadedCount++;
-      broadcast();
-      if (!firstFrameReady && i === 0) {
-        firstFrameReady = true;
-        renderFrame(0);
-        gsap.fromTo(
-          canvas,
-          { opacity: 0, scale: 1.04 },
-          { opacity: 1, scale: 1, duration: 1.1, ease: "power3.out" }
-        );
-      }
-    };
-
-    BARBELL_FRAMES.forEach((src, i) => {
-      const img = new Image();
-      img.decoding = "async";
-      img.onload = () => onFrameLoad(i, img);
-      img.onerror = () => { loadedCount++; broadcast(); };
-      img.src = src;
-    });
-
-    // Render frame: plate at 50% height, anchored right at 74%
-    const renderFrame = (frameIdx: number) => {
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-
-      const idx = Math.max(0, Math.min(N - 1, frameIdx));
-      let img = images[idx];
-      if (!img) {
-        for (let d = 1; d < N && !img; d++) {
-          img = images[Math.max(0, idx - d)] || images[Math.min(N - 1, idx + d)] || null;
-        }
-      }
-      if (!img) return;
-
-      const targetH = h * 0.5;
-      const scale = targetH / img.naturalHeight;
-      const targetW = img.naturalWidth * scale;
-      const anchorX = isMobile ? 0.5 : 0.74;
-      const dx = w * anchorX - targetW / 2;
-      const dy = h * 0.5 - targetH / 2;
-      ctx.drawImage(img, dx, dy, targetW, targetH);
-    };
-
-    const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      renderFrame(0);
-    };
-
-    let ticking = false;
-    const onResize = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => { resize(); ticking = false; });
-    };
-    resize();
-    gsap.set(canvas, { opacity: 0 });
-    window.addEventListener("resize", onResize);
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // Split only static headline lines
     const staticLines = root.querySelectorAll<HTMLElement>(".rf-hero-line.rf-hero-static-line");
@@ -131,10 +48,6 @@ export function Hero() {
     const holder = root.querySelector<HTMLElement>(".rf-swap-word-holder");
     if (holder) gsap.set(holder, { yPercent: 100, opacity: 0 });
 
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
     // Timer-based word rotation: 1.5s interval, 0.6s crossfade
     let currentWordIdx = 0;
     let rotateInterval: number | undefined;
@@ -149,7 +62,7 @@ export function Hero() {
       }, 1500);
     }
 
-    // Cursor-reactive rays: clamped to ±2%, slow lerp (1.0s)
+    // Cursor-reactive rays: clamped to ±2%, slow lerp
     const raysWrap = raysWrapRef.current;
     let onPointerMove: ((e: PointerEvent) => void) | null = null;
     if (raysWrap && !reduceMotion && !("ontouchstart" in window)) {
@@ -165,8 +78,6 @@ export function Hero() {
       };
       root.addEventListener("pointermove", onPointerMove);
     }
-
-    let lastRenderedIdx = -1;
 
     const ctxAnim = gsap.context(() => {
       ScrollTrigger.matchMedia({
@@ -185,35 +96,11 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.7 }, "-=0.5")
             .to(".rf-hero-scroll-hint", { opacity: 1, duration: 0.6 }, "-=0.4");
 
-          // Direct frame-index scrub
-          ScrollTrigger.create({
-            trigger: root,
-            start: "top top",
-            end: HERO_SCROLL_LENGTH,
-            pin: true,
-            pinSpacing: true,
-            scrub: 0.6,
-            invalidateOnRefresh: true,
-            onUpdate: (self) => {
-              const idx = Math.round(self.progress * (N - 1));
-              if (idx !== lastRenderedIdx) {
-                renderFrame(idx);
-                lastRenderedIdx = idx;
-              }
-            },
-          });
-
           // Dashboard
           const dash = root.querySelector<HTMLElement>(".rf-hero-dashboard");
           if (dash) {
             gsap.set(dash, { opacity: 0, x: 120, scale: 0.9, rotateY: 10, filter: "blur(10px)", transformPerspective: 900, transformOrigin: "center center" });
             gsap.to(dash, { opacity: 1, x: 0, scale: 1, rotateY: 4, filter: "blur(0px)", duration: 1.4, ease: "power3.out", delay: 0.35 });
-            const scrollTl = gsap.timeline({
-              scrollTrigger: { trigger: root, start: "top top", end: HERO_SCROLL_LENGTH, scrub: 0.6 },
-            });
-            scrollTl
-              .to(dash, { yPercent: -10, ease: "none", duration: 0.7 }, 0)
-              .to(dash, { y: -80, opacity: 0, scale: 0.95, filter: "blur(8px)", ease: "power2.in", duration: 0.3 }, 0.7);
           }
         },
 
@@ -231,19 +118,6 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.6 }, "-=0.4")
             .to(".rf-hero-counter", { opacity: 1, duration: 0.5 }, "-=0.3");
 
-          gsap.to({ frame: 0 }, {
-            frame: N - 1,
-            duration: 4,
-            ease: "power2.inOut",
-            onUpdate: function () {
-              const idx = Math.round((this as any).targets()[0].frame);
-              if (idx !== lastRenderedIdx) {
-                renderFrame(idx);
-                lastRenderedIdx = idx;
-              }
-            },
-          });
-
           const dashM = root.querySelector<HTMLElement>(".rf-hero-dashboard");
           if (dashM) {
             gsap.fromTo(dashM, { opacity: 0, y: 24, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 1.0, ease: "power3.out", delay: 0.3 });
@@ -256,8 +130,6 @@ export function Hero() {
           if (split?.chars) gsap.set(split.chars, { opacity: 1, yPercent: 0 });
           if (holder) gsap.set(holder, { opacity: 1, yPercent: 0 });
           gsap.set(allWords, { opacity: (i) => (i === 0 ? 1 : 0), y: 0 });
-          gsap.set(canvas, { opacity: 1 });
-          renderFrame(0);
         },
       });
     }, root);
@@ -269,7 +141,6 @@ export function Hero() {
     }
 
     return () => {
-      window.removeEventListener("resize", onResize);
       window.removeEventListener("load", onLoad);
       if (rotateInterval) window.clearInterval(rotateInterval);
       if (onPointerMove) root.removeEventListener("pointermove", onPointerMove);
@@ -280,7 +151,6 @@ export function Hero() {
 
   return (
     <section ref={rootRef} className="rf-hero" aria-label="REDFIT hero">
-      <canvas ref={canvasRef} className="rf-hero-canvas" />
       <div className="rf-hero-rays" ref={raysWrapRef}>
         <SideRays
           rayColor1="#8B0000"
