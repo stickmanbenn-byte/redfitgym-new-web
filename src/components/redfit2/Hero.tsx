@@ -17,7 +17,7 @@ function LiveCount() {
   }, []);
   return (
     <>
-      <b>{n}</b> Training now \u00b7 4.9\u2605 on Google
+      <b>{n}</b> Training now · 4.9★ on Google
     </>
   );
 }
@@ -38,7 +38,7 @@ export function Hero() {
     const N = BARBELL_FRAMES.length;
     const isMobile = window.innerWidth < 768;
 
-    // Preload frames: first 20 eagerly, rest progressively
+    // Preload frames
     const images: (HTMLImageElement | null)[] = new Array(N).fill(null);
     let loadedCount = 0;
     let firstFrameReady = false;
@@ -55,7 +55,6 @@ export function Hero() {
       images[i] = img;
       loadedCount++;
       broadcast();
-      // Entrance: reveal canvas once first frame is ready
       if (!firstFrameReady && i === 0) {
         firstFrameReady = true;
         renderFrame(0);
@@ -75,7 +74,7 @@ export function Hero() {
       img.src = src;
     });
 
-    // Render a specific frame index, right-anchored
+    // Render frame: plate at 50% height, anchored right at 74%
     const renderFrame = (frameIdx: number) => {
       const w = canvas.width;
       const h = canvas.height;
@@ -83,7 +82,6 @@ export function Hero() {
 
       const idx = Math.max(0, Math.min(N - 1, frameIdx));
       let img = images[idx];
-      // Fallback to nearest loaded frame
       if (!img) {
         for (let d = 1; d < N && !img; d++) {
           img = images[Math.max(0, idx - d)] || images[Math.min(N - 1, idx + d)] || null;
@@ -91,14 +89,12 @@ export function Hero() {
       }
       if (!img) return;
 
-      // Plate occupies ~62% of viewport height
-      const targetH = h * 0.62;
+      const targetH = h * 0.5;
       const scale = targetH / img.naturalHeight;
       const targetW = img.naturalWidth * scale;
-      // Anchor center-point at 72% across (desktop) or 50% (mobile)
-      const anchorX = isMobile ? 0.5 : 0.72;
+      const anchorX = isMobile ? 0.5 : 0.74;
       const dx = w * anchorX - targetW / 2;
-      const dy = (h - targetH) / 2;
+      const dy = h * 0.5 - targetH / 2;
       ctx.drawImage(img, dx, dy, targetW, targetH);
     };
 
@@ -108,7 +104,6 @@ export function Hero() {
       canvas.width = Math.max(1, Math.floor(rect.width * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // Re-render current frame at new size
       renderFrame(0);
     };
 
@@ -119,7 +114,6 @@ export function Hero() {
       requestAnimationFrame(() => { resize(); ticking = false; });
     };
     resize();
-    // Hide canvas until first frame loads (entrance will reveal it)
     gsap.set(canvas, { opacity: 0 });
     window.addEventListener("resize", onResize);
 
@@ -155,25 +149,23 @@ export function Hero() {
       }, 1500);
     }
 
-    // Cursor-reactive rays
+    // Cursor-reactive rays: clamped to ±2%, slow lerp (1.0s)
     const raysWrap = raysWrapRef.current;
-    let raysX: ((v: number) => void) | null = null;
-    let raysY: ((v: number) => void) | null = null;
     let onPointerMove: ((e: PointerEvent) => void) | null = null;
     if (raysWrap && !reduceMotion && !("ontouchstart" in window)) {
-      raysX = gsap.quickTo(raysWrap, "x", { duration: 0.7, ease: "power3.out" });
-      raysY = gsap.quickTo(raysWrap, "y", { duration: 0.7, ease: "power3.out" });
+      const MAX_OFFSET = 0.02;
+      const raysX = gsap.quickTo(raysWrap, "x", { duration: 1.0, ease: "power3.out" });
+      const raysY = gsap.quickTo(raysWrap, "y", { duration: 1.0, ease: "power3.out" });
       onPointerMove = (e: PointerEvent) => {
         const rect = root.getBoundingClientRect();
-        const nx = (e.clientX - rect.left) / rect.width - 0.5;
-        const ny = (e.clientY - rect.top) / rect.height - 0.5;
-        raysX?.(nx * rect.width * 0.08);
-        raysY?.(ny * rect.height * 0.08);
+        const nx = gsap.utils.clamp(-MAX_OFFSET, MAX_OFFSET, ((e.clientX - rect.left) / rect.width - 0.5) * MAX_OFFSET * 2);
+        const ny = gsap.utils.clamp(-MAX_OFFSET, MAX_OFFSET, ((e.clientY - rect.top) / rect.height - 0.5) * MAX_OFFSET * 2);
+        raysX(nx * rect.width);
+        raysY(ny * rect.height);
       };
       root.addEventListener("pointermove", onPointerMove);
     }
 
-    // Track last rendered frame to avoid redundant draws
     let lastRenderedIdx = -1;
 
     const ctxAnim = gsap.context(() => {
@@ -193,7 +185,7 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.7 }, "-=0.5")
             .to(".rf-hero-scroll-hint", { opacity: 1, duration: 0.6 }, "-=0.4");
 
-          // Direct frame-index scrub: no proxy tween, tighter connection
+          // Direct frame-index scrub
           ScrollTrigger.create({
             trigger: root,
             start: "top top",
@@ -239,7 +231,6 @@ export function Hero() {
             .to(".rf-hero-cta-row", { opacity: 1, y: 0, duration: 0.6 }, "-=0.4")
             .to(".rf-hero-counter", { opacity: 1, duration: 0.5 }, "-=0.3");
 
-          // Mobile: auto-play frames over 4s
           gsap.to({ frame: 0 }, {
             frame: N - 1,
             duration: 4,
@@ -313,7 +304,7 @@ export function Hero() {
 
       <div className="rf-hero-content">
         <div className="rf-hero-eyebrow" style={{ transform: "translateY(10px)" }}>
-          Chhatrapati Sambhajinagar \u00b7 Est. Strength
+          Chhatrapati Sambhajinagar · Est. Strength
         </div>
 
         <h1 className="rf-hero-headline">
@@ -333,16 +324,16 @@ export function Hero() {
         </h1>
 
         <p className="rf-hero-sub" style={{ transform: "translateY(10px)" }}>
-          Forged to last. A premium strength gym engineered around real training \u2014 Red Strength equipment,
+          Forged to last. A premium strength gym engineered around real training — Red Strength equipment,
           certified coaches, and a room that respects the work.
         </p>
 
         <div className="rf-hero-cta-row" style={{ transform: "translateY(10px)" }}>
-          <a href="#pricing" className="rf-btn accent">Start Free Trial \u2192</a>
+          <a href="#pricing" className="rf-btn accent">Start Free Trial →</a>
           <a href="#programs" className="rf-btn ghost">See Programs</a>
         </div>
       </div>
-      <div className="rf-hero-scroll-hint">Scroll \u00b7 Load the Bar</div>
+      <div className="rf-hero-scroll-hint">Scroll · Load the Bar</div>
     </section>
   );
 }

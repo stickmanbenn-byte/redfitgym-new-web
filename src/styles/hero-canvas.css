@@ -7,7 +7,6 @@
   display: block;
   z-index: 1;
   pointer-events: none;
-  /* No blend mode: PNGs are transparent */
 }
 
 /* Text layers above canvas */
@@ -28,4 +27,18 @@
 }
 .rf-hero-line {
   white-space: nowrap;
+}
+
+/* Scroll progress rail: below nav, starts at 0 width */
+.rf-scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 0%;
+  min-width: 0;
+  background: var(--rf-accent-hot, #f43f5e);
+  z-index: 40;
+  pointer-events: none;
+  will-change: width;
 }
