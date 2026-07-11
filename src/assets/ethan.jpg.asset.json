@@ -1,11 +1,1 @@
-{
-  "version": 1,
-  "asset_id": "dee90a3c-c8c0-47c9-b318-24785f5f51ba",
-  "project_id": "0b2b1f18-f1c5-4af6-a2db-3b86a35ad4ae",
-  "url": "/__l5e/assets-v1/dee90a3c-c8c0-47c9-b318-24785f5f51ba/ethan.jpg",
-  "r2_key": "a/v1/0b2b1f18-f1c5-4af6-a2db-3b86a35ad4ae/dee90a3c-c8c0-47c9-b318-24785f5f51ba/ethan.jpg",
-  "original_filename": "ethan.jpg",
-  "size": 75809,
-  "content_type": "image/jpeg",
-  "created_at": "2026-07-09T13:27:15Z"
-}
+{ "url": "/src/assets/ethan.jpg" }
